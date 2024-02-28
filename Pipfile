@@ -1,0 +1,19 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+keyring = "*"
+matplotlib = "*"
+pandas = "*"
+rasterio = "*"
+requests = "*"
+rioxarray = "*"
+ipdb = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.8"
+python_full_version = "3.8.18"

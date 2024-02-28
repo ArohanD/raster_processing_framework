@@ -1,0 +1,41 @@
+{
+  "type": "FeatureCollection",
+  "name": "durham_county_bbox",
+  "crs": {
+    "type": "name",
+    "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" }
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "FID": 10,
+        "OBJECTID": 11,
+        "County": "Durham",
+        "FIPS": "063",
+        "Rec_Survey": "Recorded survey data is available. Visit North Carolina Geodetic Survey for information. https://ncgs.state.nc.us",
+        "NCGS_url": "https://ncem-gis.maps.arcgis.com/apps/OnePane/basicviewer/index.html?appid=523dc3d6b7424a20afbae7b7c1b99d33",
+        "ck_date": 1322524800000,
+        "Shape__Are": 8303366184.2734404,
+        "Shape__Len": 430700.48031826399,
+        "GlobalID": "dccdc7be-01ee-4ab8-a297-ff8242e40712",
+        "width": 0.316985,
+        "height": 0.37611,
+        "area": 0.119221,
+        "perimeter": 1.386191
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-79.016303759539142, 35.863217411268941],
+            [-78.699318347193724, 35.863217411268941],
+            [-78.699318347193724, 36.239327491793802],
+            [-79.016303759539142, 36.239327491793802],
+            [-79.016303759539142, 35.863217411268941]
+          ]
+        ]
+      }
+    }
+  ]
+}
