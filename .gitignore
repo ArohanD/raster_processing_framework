@@ -1,4 +1,5 @@
 /.DS_Store
 outputs/** 
+landsat/**
 
 **/**.aux.xml
