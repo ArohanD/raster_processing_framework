@@ -2,22 +2,52 @@ import argparse
 import os
 import sys
 import rasterio
+import json
 from pprint import pprint
-
 
 import os
 import rasterio
 
 
-def calc_surface_temp(scene):
+def calc_surface_temp(scene, celsius=False):
     required_bands = ["B10", "EMIS", "MTL"]
     all_bands_exist = all(band in scene for band in required_bands)
     if not all_bands_exist:
-        raise Exception(f"Required bands are {required_bands}, only {scene.keys()} were provided")
-    pprint(scene)
+        raise Exception(
+            f"Required bands are {required_bands}, only {scene.keys()} were provided"
+        )
+    path_band_10 = scene["B10"]
+    path_mtl = scene["MTL"]
+
+    with rasterio.open(path_band_10) as src:
+        b10 = src.read(1)
+        meta = src.meta
+
+    with open(path_mtl, "r") as f:
+        mtl = json.load(f)
+
+    multiplier = float(
+        mtl["LANDSAT_METADATA_FILE"]["LEVEL2_SURFACE_TEMPERATURE_PARAMETERS"][
+            "TEMPERATURE_MULT_BAND_ST_B10"
+        ]
+    )
+    coefficient = float(
+        mtl["LANDSAT_METADATA_FILE"]["LEVEL2_SURFACE_TEMPERATURE_PARAMETERS"][
+            "TEMPERATURE_ADD_BAND_ST_B10"
+        ]
+    )
+    celsius_scalar = -272.15 if celsius else 0
+    new_band = multiplier * b10 + coefficient + celsius_scalar
+    new_meta = meta.copy()
+    return {"band": new_band, "meta": new_meta}
 
 
-process_dict = {"surface_temp": calc_surface_temp}
+process_dict = {
+    "surface_temp": calc_surface_temp,
+    "surface_temp_celsius": lambda scene, celsius=True: calc_surface_temp(
+        scene, celsius
+    ),
+}
 
 
 def load_bands(scene_folder, band_numbers, meta_bands):
@@ -36,8 +66,19 @@ def load_bands(scene_folder, band_numbers, meta_bands):
     return band_paths
 
 
+def write_outputs(output_path, output_suffix, output_library):
+    pprint(output_library)
+    for scene_key in output_library:
+        current_scene = output_library[scene_key]
+        modified_scene_key = scene_key.replace("./landsat", "", 1)
+        file_path = f"{output_path}{modified_scene_key}_{output_suffix}.tif"
+        print(file_path)
+        with rasterio.open(file_path, "w", **current_scene["meta"]) as destination:
+            destination.write(current_scene["band"], 1)
+
+
 def process_landsat_data(
-    input_folder, processing_method, output_path, output_prefix=""
+    input_folder, processing_method, output_path, output_suffix=""
 ):
     if processing_method not in process_dict:
         raise Exception(f"Unsupported processing method: {processing_method}")
@@ -56,6 +97,8 @@ def process_landsat_data(
     for scene in scene_library:
         output_library[scene] = process_dict[processing_method](scene_library[scene])
 
+    write_outputs(output_path, output_suffix, output_library)
+
 
 def main():
     parser = argparse.ArgumentParser(description="Process Landsat data.")
@@ -67,10 +110,10 @@ def main():
     )
     parser.add_argument("output_path", help="Path where the output files will be saved")
     parser.add_argument(
-        "-p",
-        "--prefix",
-        dest="output_prefix",
-        help="Prefix for the output GeoTiffs",
+        "-s",
+        "--suffix",
+        dest="output_suffix",
+        help="Suffix for the output GeoTiffs",
         default="",
     )
 
@@ -86,7 +129,7 @@ def main():
         os.makedirs(args.output_path)
 
     process_landsat_data(
-        args.input_folder, args.processing_method, args.output_path, args.output_prefix
+        args.input_folder, args.processing_method, args.output_path, args.output_suffix
     )
 
 
