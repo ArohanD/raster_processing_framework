@@ -4,6 +4,7 @@ import sys
 import rasterio
 import json
 from pprint import pprint
+import numpy as np
 
 import os
 import rasterio
@@ -39,6 +40,9 @@ def calc_surface_temp(scene, celsius=False):
     celsius_scalar = -272.15 if celsius else 0
     new_band = multiplier * b10 + coefficient + celsius_scalar
     new_meta = meta.copy()
+    new_meta.update({
+        'compress': 'deflate'
+    })
     return {"band": new_band, "meta": new_meta}
 
 
@@ -67,14 +71,32 @@ def load_bands(scene_folder, band_numbers, meta_bands):
 
 
 def write_outputs(output_path, output_suffix, output_library):
-    pprint(output_library)
     for scene_key in output_library:
         current_scene = output_library[scene_key]
         modified_scene_key = scene_key.replace("./landsat", "", 1)
         file_path = f"{output_path}{modified_scene_key}_{output_suffix}.tif"
         print(file_path)
         with rasterio.open(file_path, "w", **current_scene["meta"]) as destination:
-            destination.write(current_scene["band"], 1)
+            band_data = current_scene["band"]
+            destination.write(band_data, 1)
+            
+            # Mask no-data values if specified, else use the data as is
+            if 'nodata' in current_scene['meta']:
+                mask = band_data != current_scene['meta']['nodata']
+                valid_data = band_data[mask]
+            else:
+                valid_data = band_data
+                
+            # Compute statistics
+            stats_minimum = np.min(valid_data)
+            stats_maximum = np.max(valid_data)
+            stats_mean = np.mean(valid_data)
+            stats_stddev = np.std(valid_data)
+            stats_valid_percent = 100.0 * np.count_nonzero(valid_data) / valid_data.size
+            
+            # Update metadata with statistics for the band
+            destination.update_tags(1, STATISTICS_MINIMUM=stats_minimum, STATISTICS_MAXIMUM=stats_maximum, STATISTICS_MEAN=stats_mean, STATISTICS_STDDEV=stats_stddev, STATISTICS_VALID_PERCENT=stats_valid_percent)
+
 
 
 def process_landsat_data(
