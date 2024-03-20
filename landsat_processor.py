@@ -4,6 +4,7 @@ import sys
 import rasterio
 import json
 from pprint import pprint
+from datetime import datetime
 import numpy as np
 
 import os
@@ -23,6 +24,8 @@ def calc_surface_temp(scene, celsius=False):
     with rasterio.open(path_band_10) as src:
         b10 = src.read(1)
         meta = src.meta
+        bounds = src.bounds
+        resolution = src.res
 
     with open(path_mtl, "r") as f:
         mtl = json.load(f)
@@ -40,17 +43,54 @@ def calc_surface_temp(scene, celsius=False):
     celsius_scalar = -272.15 if celsius else 0
     new_band = multiplier * b10 + coefficient + celsius_scalar
     new_meta = meta.copy()
-    new_meta.update({
-        'compress': 'deflate'
-    })
-    return {"band": new_band, "meta": new_meta}
+    new_meta.update({"compress": "deflate"})
+    return {
+        "band": new_band,
+        "meta": new_meta,
+        "mtl": mtl,
+        "bounds": bounds,
+        "resolution": resolution,
+    }
+
+
+def average_bands(scene_list):
+    for scene in scene_list:
+        print(scene["meta"], scene["bounds"], scene["resolution"])
+
+
+def average_ST_by_year(st_scene_library):
+    print("Aggregating processed bands by year...")
+
+    scenes_by_year = {}
+
+    for scene in st_scene_library:
+        date_acquired = st_scene_library[scene]["mtl"]["LANDSAT_METADATA_FILE"][
+            "LEVEL2_PROCESSING_RECORD"
+        ]["DATE_PRODUCT_GENERATED"]
+        date_obj = datetime.strptime(date_acquired, "%Y-%m-%dT%H:%M:%SZ")
+        year = date_obj.year
+        if year in scenes_by_year:
+            scenes_by_year[year].append(st_scene_library[scene])
+        else:
+            scenes_by_year[year] = [st_scene_library[scene]]
+
+    averages_by_year = {}
+    for year in scenes_by_year:
+        averages_by_year[f"averaged_ST_{year}"] = average_bands(scenes_by_year[year])
+
+    return {}
 
 
 process_dict = {
-    "surface_temp": calc_surface_temp,
-    "surface_temp_celsius": lambda scene, celsius=True: calc_surface_temp(
-        scene, celsius
-    ),
+    "surface_temp": {"folder_process": calc_surface_temp, "bulk_process": None},
+    "surface_temp_celsius": {
+        "folder_process": lambda scene, celsius=True: calc_surface_temp(scene, celsius),
+        "bulk_process": None,
+    },
+    "averaged_surface_temp_celsius": {
+        "folder_process": lambda scene, celsius=True: calc_surface_temp(scene, celsius),
+        "bulk_process": average_ST_by_year,
+    },
 }
 
 
@@ -79,24 +119,30 @@ def write_outputs(output_path, output_suffix, output_library):
         with rasterio.open(file_path, "w", **current_scene["meta"]) as destination:
             band_data = current_scene["band"]
             destination.write(band_data, 1)
-            
+
             # Mask no-data values if specified, else use the data as is
-            if 'nodata' in current_scene['meta']:
-                mask = band_data != current_scene['meta']['nodata']
+            if "nodata" in current_scene["meta"]:
+                mask = band_data != current_scene["meta"]["nodata"]
                 valid_data = band_data[mask]
             else:
                 valid_data = band_data
-                
+
             # Compute statistics
             stats_minimum = np.min(valid_data)
             stats_maximum = np.max(valid_data)
             stats_mean = np.mean(valid_data)
             stats_stddev = np.std(valid_data)
             stats_valid_percent = 100.0 * np.count_nonzero(valid_data) / valid_data.size
-            
-            # Update metadata with statistics for the band
-            destination.update_tags(1, STATISTICS_MINIMUM=stats_minimum, STATISTICS_MAXIMUM=stats_maximum, STATISTICS_MEAN=stats_mean, STATISTICS_STDDEV=stats_stddev, STATISTICS_VALID_PERCENT=stats_valid_percent)
 
+            # Update metadata with statistics for the band
+            destination.update_tags(
+                1,
+                STATISTICS_MINIMUM=stats_minimum,
+                STATISTICS_MAXIMUM=stats_maximum,
+                STATISTICS_MEAN=stats_mean,
+                STATISTICS_STDDEV=stats_stddev,
+                STATISTICS_VALID_PERCENT=stats_valid_percent,
+            )
 
 
 def process_landsat_data(
@@ -115,9 +161,17 @@ def process_landsat_data(
             band_paths = load_bands(full_path, required_bands, meta_bands)
             scene_library[full_path] = band_paths
 
-    output_library = {}
+    processed_scene_library = {}
     for scene in scene_library:
-        output_library[scene] = process_dict[processing_method](scene_library[scene])
+        processed_scene_library[scene] = process_dict[processing_method][
+            "folder_process"
+        ](scene_library[scene])
+
+    output_library = (
+        process_dict[processing_method]["bulk_process"](processed_scene_library)
+        if process_dict[processing_method]["bulk_process"]
+        else processed_scene_library
+    )
 
     write_outputs(output_path, output_suffix, output_library)
 
