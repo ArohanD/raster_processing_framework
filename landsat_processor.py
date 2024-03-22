@@ -1,17 +1,18 @@
 import argparse
+import json
 import os
 import sys
-import rasterio
-import json
-from pprint import pprint
 from datetime import datetime
+from pprint import pprint
+
 import numpy as np
-
-import os
 import rasterio
+from affine import Affine
+from rasterio.windows import from_bounds
 
 
-def calc_surface_temp(scene, celsius=False):
+def calc_surface_temp(scene, celsius=False, window=False):
+    print("inFunc", window)
     required_bands = ["B10", "EMIS", "MTL"]
     all_bands_exist = all(band in scene for band in required_bands)
     if not all_bands_exist:
@@ -22,7 +23,7 @@ def calc_surface_temp(scene, celsius=False):
     path_mtl = scene["MTL"]
 
     with rasterio.open(path_band_10) as src:
-        b10 = src.read(1)
+        b10 = src.read(1, window=window) if window else src.read(1)
         meta = src.meta
         bounds = src.bounds
         resolution = src.res
@@ -54,8 +55,40 @@ def calc_surface_temp(scene, celsius=False):
 
 
 def average_bands(scene_list):
+    min_x, min_y, max_x, max_y = (
+        float("inf"),
+        float("inf"),
+        float("-inf"),
+        float("-inf"),
+    )
+
+    band_sum = None
     for scene in scene_list:
         print(scene["meta"], scene["bounds"], scene["resolution"])
+        band, meta, bounds, resolution = (
+            scene["band"],
+            scene["meta"],
+            scene["bounds"],
+            scene["resolution"],
+        )
+        if band_sum is None:
+            band_sum = np.zeros_like(band)
+        print(band.shape)
+        band_sum += band
+        min_x = min(min_x, bounds.left)
+        min_y = min(min_y, bounds.bottom)
+        max_x = max(max_x, bounds.right)
+        max_y = max(max_y, bounds.top)
+    # Assuming resolutions are all the same, which they are (30 x 30)
+    res_x, res_y = scene_list[0]["resolution"]
+
+    output_transform = Affine(res_x, 0, min_x, 0, -res_y, max_y)
+
+    # Calculate the width and height of the output raster
+    output_width = int((max_x - min_x) / res_x)
+    output_height = int((max_y - min_y) / abs(res_y))
+    bands_average = band_sum / len(scene_list)
+    import pdb; pdb.set_trace()
 
 
 def average_ST_by_year(st_scene_library):
@@ -88,7 +121,7 @@ process_dict = {
         "bulk_process": None,
     },
     "averaged_surface_temp_celsius": {
-        "folder_process": lambda scene, celsius=True: calc_surface_temp(scene, celsius),
+        "folder_process": lambda scene, celsius=True, window=None: calc_surface_temp(scene, celsius, window),
         "bulk_process": average_ST_by_year,
     },
 }
@@ -115,7 +148,6 @@ def write_outputs(output_path, output_suffix, output_library):
         current_scene = output_library[scene_key]
         modified_scene_key = scene_key.replace("./landsat", "", 1)
         file_path = f"{output_path}{modified_scene_key}_{output_suffix}.tif"
-        print(file_path)
         with rasterio.open(file_path, "w", **current_scene["meta"]) as destination:
             band_data = current_scene["band"]
             destination.write(band_data, 1)
@@ -145,6 +177,29 @@ def write_outputs(output_path, output_suffix, output_library):
             )
 
 
+def get_common_window(scene_library):
+    # Initialize bounds to the first raster's bounds
+    first_scene_key = list(scene_library.keys())[0]
+    with rasterio.open(scene_library[first_scene_key]["B10"]) as src:
+        min_x, min_y, max_x, max_y = src.bounds
+        base_transform = src.transform
+        print("BT", base_transform)
+
+    # Update bounds based on the intersection of all raster bounds
+    for scene_key in list(scene_library.keys())[1:]:
+        with rasterio.open(scene_library[scene_key]["B10"]) as src:
+            print("BT", src.transform)
+            b = src.bounds
+            min_x = max(min_x, b.left)
+            max_x = min(max_x, b.right)
+            min_y = max(min_y, b.bottom)
+            max_y = min(max_y, b.top)
+
+    # Calculate the window of overlap in pixel coordinates
+    overlap_window = from_bounds( min_x,  min_y,  max_x,  max_y, transform=Affine(30.0, 0.0, min_x, 0.0, -30.0, max_y))
+    return overlap_window
+
+
 def process_landsat_data(
     input_folder, processing_method, output_path, output_suffix=""
 ):
@@ -162,10 +217,13 @@ def process_landsat_data(
             scene_library[full_path] = band_paths
 
     processed_scene_library = {}
+    run_windowed = bool(process_dict[processing_method]["bulk_process"])
+    if run_windowed:
+        window = get_common_window(scene_library)
     for scene in scene_library:
         processed_scene_library[scene] = process_dict[processing_method][
             "folder_process"
-        ](scene_library[scene])
+        ](scene_library[scene], window=(window if run_windowed else None))
 
     output_library = (
         process_dict[processing_method]["bulk_process"](processed_scene_library)
