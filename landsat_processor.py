@@ -11,8 +11,7 @@ from affine import Affine
 from rasterio.windows import from_bounds
 
 
-def calc_surface_temp(scene, celsius=False, window=False):
-    print("inFunc", window)
+def calc_surface_temp(scene, celsius=False, window=False, bounds=False):
     required_bands = ["B10", "EMIS", "MTL"]
     all_bands_exist = all(band in scene for band in required_bands)
     if not all_bands_exist:
@@ -23,7 +22,11 @@ def calc_surface_temp(scene, celsius=False, window=False):
     path_mtl = scene["MTL"]
 
     with rasterio.open(path_band_10) as src:
-        b10 = src.read(1, window=window) if window else src.read(1)
+        transform = src.transform
+        new_window = from_bounds(
+            bounds[0], bounds[1], bounds[2], bounds[3], transform=transform
+        ) if bounds else None
+        b10 = src.read(1, window=new_window) if window else src.read(1)
         meta = src.meta
         bounds = src.bounds
         resolution = src.res
@@ -44,7 +47,12 @@ def calc_surface_temp(scene, celsius=False, window=False):
     celsius_scalar = -272.15 if celsius else 0
     new_band = multiplier * b10 + coefficient + celsius_scalar
     new_meta = meta.copy()
-    new_meta.update({"compress": "deflate"})
+    new_meta.update({
+        "compress": "deflate",
+        "height": new_band.shape[0],
+        "width": new_band.shape[1],
+
+        })
     return {
         "band": new_band,
         "meta": new_meta,
@@ -64,7 +72,6 @@ def average_bands(scene_list):
 
     band_sum = None
     for scene in scene_list:
-        print(scene["meta"], scene["bounds"], scene["resolution"])
         band, meta, bounds, resolution = (
             scene["band"],
             scene["meta"],
@@ -73,7 +80,6 @@ def average_bands(scene_list):
         )
         if band_sum is None:
             band_sum = np.zeros_like(band)
-        print(band.shape)
         band_sum += band
         min_x = min(min_x, bounds.left)
         min_y = min(min_y, bounds.bottom)
@@ -88,7 +94,16 @@ def average_bands(scene_list):
     output_width = int((max_x - min_x) / res_x)
     output_height = int((max_y - min_y) / abs(res_y))
     bands_average = band_sum / len(scene_list)
-    import pdb; pdb.set_trace()
+    new_meta = meta.copy()
+    new_meta.update(
+        {
+            "transform": output_transform,
+            "width": output_width,
+            "height": output_height,
+            "compress": "deflate",
+        }
+    )
+    return {"band": bands_average, "meta": new_meta}
 
 
 def average_ST_by_year(st_scene_library):
@@ -111,17 +126,21 @@ def average_ST_by_year(st_scene_library):
     for year in scenes_by_year:
         averages_by_year[f"averaged_ST_{year}"] = average_bands(scenes_by_year[year])
 
-    return {}
+    return averages_by_year
 
 
 process_dict = {
     "surface_temp": {"folder_process": calc_surface_temp, "bulk_process": None},
     "surface_temp_celsius": {
-        "folder_process": lambda scene, celsius=True: calc_surface_temp(scene, celsius),
+        "folder_process": lambda scene, celsius=True, window=None, bounds=None: calc_surface_temp(
+            scene, celsius, window, bounds
+        ),
         "bulk_process": None,
     },
     "averaged_surface_temp_celsius": {
-        "folder_process": lambda scene, celsius=True, window=None: calc_surface_temp(scene, celsius, window),
+        "folder_process": lambda scene, celsius=True, window=None, bounds=None: calc_surface_temp(
+            scene, celsius, window, bounds
+        ),
         "bulk_process": average_ST_by_year,
     },
 }
@@ -144,10 +163,13 @@ def load_bands(scene_folder, band_numbers, meta_bands):
 
 
 def write_outputs(output_path, output_suffix, output_library):
+    print("Writing output files...")
+    print(f"Output path: {output_path}")
     for scene_key in output_library:
         current_scene = output_library[scene_key]
-        modified_scene_key = scene_key.replace("./landsat", "", 1)
+        modified_scene_key = scene_key.replace("./landsat", "", 1) if scene_key.startswith("./landsat") else f"/{scene_key}"
         file_path = f"{output_path}{modified_scene_key}_{output_suffix}.tif"
+        print(f"Writing {file_path}")
         with rasterio.open(file_path, "w", **current_scene["meta"]) as destination:
             band_data = current_scene["band"]
             destination.write(band_data, 1)
@@ -182,13 +204,10 @@ def get_common_window(scene_library):
     first_scene_key = list(scene_library.keys())[0]
     with rasterio.open(scene_library[first_scene_key]["B10"]) as src:
         min_x, min_y, max_x, max_y = src.bounds
-        base_transform = src.transform
-        print("BT", base_transform)
 
     # Update bounds based on the intersection of all raster bounds
     for scene_key in list(scene_library.keys())[1:]:
         with rasterio.open(scene_library[scene_key]["B10"]) as src:
-            print("BT", src.transform)
             b = src.bounds
             min_x = max(min_x, b.left)
             max_x = min(max_x, b.right)
@@ -196,8 +215,14 @@ def get_common_window(scene_library):
             max_y = min(max_y, b.top)
 
     # Calculate the window of overlap in pixel coordinates
-    overlap_window = from_bounds( min_x,  min_y,  max_x,  max_y, transform=Affine(30.0, 0.0, min_x, 0.0, -30.0, max_y))
-    return overlap_window
+    overlap_window = from_bounds(
+        min_x,
+        min_y,
+        max_x,
+        max_y,
+        transform=rasterio.Affine(30.0, 0.0, min_x, 0.0, -30.0, max_y),
+    )
+    return {"window": overlap_window, "bounds": (min_x, min_y, max_x, max_y)}
 
 
 def process_landsat_data(
@@ -219,11 +244,18 @@ def process_landsat_data(
     processed_scene_library = {}
     run_windowed = bool(process_dict[processing_method]["bulk_process"])
     if run_windowed:
-        window = get_common_window(scene_library)
+        window, bounds = (
+            get_common_window(scene_library)["window"],
+            get_common_window(scene_library)["bounds"],
+        )
     for scene in scene_library:
         processed_scene_library[scene] = process_dict[processing_method][
             "folder_process"
-        ](scene_library[scene], window=(window if run_windowed else None))
+        ](
+            scene_library[scene],
+            window=(window if run_windowed else None),
+            bounds=(bounds if run_windowed else None),
+        )
 
     output_library = (
         process_dict[processing_method]["bulk_process"](processed_scene_library)
