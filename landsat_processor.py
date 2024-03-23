@@ -14,15 +14,15 @@ process_dict = {
     "surface_temp": {"folder_process": calc_surface_temp, "bulk_process": None},
     # Celsius
     "surface_temp_celsius": {
-        "folder_process": lambda scene, celsius=True, window=None, bounds=None: calc_surface_temp(
-            scene, celsius, window, bounds
+        "folder_process": lambda scene, celsius=True: calc_surface_temp(
+            scene, celsius
         ),
         "bulk_process": None,
     },
     # Celsius with yearly averages
     "averaged_surface_temp_celsius": {
-        "folder_process": lambda scene, celsius=True, window=None, bounds=None, reprojection_config=None: calc_surface_temp(
-            scene, celsius, window, bounds, reprojection_config
+        "folder_process": lambda scene, celsius=True, reprojection_config=None: calc_surface_temp(
+            scene, celsius, reprojection_config
         ),
         "bulk_process": average_ST_by_year,
     },
@@ -99,20 +99,13 @@ def process_landsat_data(
             scene_library[full_path] = band_paths
 
     processed_scene_library = {}
-    run_windowed = bool(process_dict[processing_method]["bulk_process"])
-    if run_windowed:
-        window, bounds = (
-            get_common_window(scene_library)["window"],
-            get_common_window(scene_library)["bounds"],
-        )
+    process_bulk = bool(process_dict[processing_method]["bulk_process"])
     for scene in scene_library:
         processed_scene_library[scene] = process_dict[processing_method][
             "folder_process"
         ](
             scene_library[scene],
-            window=(window if run_windowed else None),
-            bounds=(bounds if run_windowed else None),
-            reprojection_config=peek(scene_library) if run_windowed else None,
+            reprojection_config=peek(scene_library) if process_bulk else None,
         )
 
     output_library = (
