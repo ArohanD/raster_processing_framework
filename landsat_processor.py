@@ -6,7 +6,7 @@ import numpy as np
 import rasterio
 
 from calc.landsat_processing_methods import calc_surface_temp
-from calc.bulk_processing_methods import average_ST_by_year
+from calc.bulk_processing_methods import average_ST_by_year, average_ST_all_data
 from file_methods.file_methods import peek
 
 process_dict = {
@@ -18,11 +18,18 @@ process_dict = {
         "bulk_process": None,
     },
     # Celsius with yearly averages
-    "averaged_surface_temp_celsius": {
+    "averaged_yearly_surface_temp_celsius": {
         "folder_process": lambda scene, celsius=True, reprojection_config=None: calc_surface_temp(
             scene, celsius, reprojection_config
         ),
         "bulk_process": average_ST_by_year,
+    },
+    # Celsius with yearly averages
+    "averaged_surface_temp_celsius": {
+        "folder_process": lambda scene, celsius=True, reprojection_config=None: calc_surface_temp(
+            scene, celsius, reprojection_config
+        ),
+        "bulk_process": average_ST_all_data,
     },
 }
 

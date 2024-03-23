@@ -37,7 +37,7 @@ def calc_surface_temp(scene, celsius=False, reprojection_config=False):
     celsius_scalar = -272.15 if celsius else 0
     converted_b10 = multiplier * b10 + coefficient + celsius_scalar
 
-    # Reproject if doinf bulk processing
+    # Reproject if doing bulk processing
     if reprojection_config:
         dest_array = np.empty(
             (reprojection_config["height"], reprojection_config["width"]),
