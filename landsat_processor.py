@@ -6,19 +6,23 @@ import numpy as np
 import rasterio
 
 from calc.landsat_processing_methods import calc_surface_temp
-from calc.bulk_processing_methods import average_ST_by_year, get_common_window
+from calc.bulk_processing_methods import average_ST_by_year
+from file_methods.file_methods import peek, get_common_window
 
 process_dict = {
+    # Kelvin
     "surface_temp": {"folder_process": calc_surface_temp, "bulk_process": None},
+    # Celsius
     "surface_temp_celsius": {
         "folder_process": lambda scene, celsius=True, window=None, bounds=None: calc_surface_temp(
             scene, celsius, window, bounds
         ),
         "bulk_process": None,
     },
+    # Celsius with yearly averages
     "averaged_surface_temp_celsius": {
-        "folder_process": lambda scene, celsius=True, window=None, bounds=None: calc_surface_temp(
-            scene, celsius, window, bounds
+        "folder_process": lambda scene, celsius=True, window=None, bounds=None, reprojection_config=None: calc_surface_temp(
+            scene, celsius, window, bounds, reprojection_config
         ),
         "bulk_process": average_ST_by_year,
     },
@@ -108,6 +112,7 @@ def process_landsat_data(
             scene_library[scene],
             window=(window if run_windowed else None),
             bounds=(bounds if run_windowed else None),
+            reprojection_config=peek(scene_library) if run_windowed else None,
         )
 
     output_library = (

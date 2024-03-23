@@ -1,8 +1,6 @@
 import numpy as np
 from datetime import datetime
 from affine import Affine
-import rasterio
-from rasterio.windows import from_bounds
 
 def average_bands(scene_list):
     min_x, min_y, max_x, max_y = (
@@ -68,28 +66,3 @@ def average_ST_by_year(st_scene_library):
         averages_by_year[f"averaged_ST_{year}"] = average_bands(scenes_by_year[year])
 
     return averages_by_year
-
-def get_common_window(scene_library):
-    # Initialize bounds to the first raster's bounds
-    first_scene_key = list(scene_library.keys())[0]
-    with rasterio.open(scene_library[first_scene_key]["B10"]) as src:
-        min_x, min_y, max_x, max_y = src.bounds
-
-    # Update bounds based on the intersection of all raster bounds
-    for scene_key in list(scene_library.keys())[1:]:
-        with rasterio.open(scene_library[scene_key]["B10"]) as src:
-            b = src.bounds
-            min_x = max(min_x, b.left)
-            max_x = min(max_x, b.right)
-            min_y = max(min_y, b.bottom)
-            max_y = min(max_y, b.top)
-
-    # Calculate the window of overlap in pixel coordinates
-    overlap_window = from_bounds(
-        min_x,
-        min_y,
-        max_x,
-        max_y,
-        transform=rasterio.Affine(30.0, 0.0, min_x, 0.0, -30.0, max_y),
-    )
-    return {"window": overlap_window, "bounds": (min_x, min_y, max_x, max_y)}

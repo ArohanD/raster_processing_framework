@@ -11,6 +11,8 @@ rasterio = "*"
 requests = "*"
 rioxarray = "*"
 ipdb = "*"
+affine = "*"
+shapely = "*"
 
 [dev-packages]
 

@@ -3,7 +3,6 @@ import rasterio
 from rasterio.enums import Resampling
 import numpy as np
 import json
-import ipdb
 
 LANDSAT_FOLDER = "./landsat_ARD"
 
@@ -61,7 +60,6 @@ def process_landsat_folder(landsat_folder):
         raw_kelvin = convert_to_kelvin(toa_radiance, mtl)
         corrected_kelvin = adjust_for_emissivity(raw_kelvin, emissivity)
         celsius = kelvin_to_celsius(corrected_kelvin)
-        ipdb.set_trace()
 
 
 # Convert Landsat 9 Band 10 to TOA Radiance
