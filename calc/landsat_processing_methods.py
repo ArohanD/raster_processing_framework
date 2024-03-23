@@ -5,9 +5,9 @@ from rasterio.warp import reproject, Resampling
 
 
 def calc_surface_temp(scene, celsius=False, reprojection_config=False):
-    print("reprojection", reprojection_config)
+    print(f"Calculating surface temperature for {scene['B10']}...")
 
-    required_bands = ["B10", "EMIS", "MTL"]
+    required_bands = ["B10", "MTL"]
     all_bands_exist = all(band in scene for band in required_bands)
     if not all_bands_exist:
         raise Exception(
@@ -17,15 +17,13 @@ def calc_surface_temp(scene, celsius=False, reprojection_config=False):
     path_mtl = scene["MTL"]
 
     with rasterio.open(path_band_10) as src:
-        # Read the band data
         b10 = src.read(1)
         meta = src.meta.copy()
 
-    # Load the MTL data
     with open(path_mtl, "r") as f:
         mtl = json.load(f)
 
-    # Perform the temperature conversion calculation
+    # Perform a temperature conversion calculation using metadata
     multiplier = float(
         mtl["LANDSAT_METADATA_FILE"]["LEVEL2_SURFACE_TEMPERATURE_PARAMETERS"][
             "TEMPERATURE_MULT_BAND_ST_B10"
@@ -39,7 +37,7 @@ def calc_surface_temp(scene, celsius=False, reprojection_config=False):
     celsius_scalar = -272.15 if celsius else 0
     converted_b10 = multiplier * b10 + coefficient + celsius_scalar
 
-    # Reproject if required
+    # Reproject if doinf bulk processing
     if reprojection_config:
         dest_array = np.empty(
             (reprojection_config["height"], reprojection_config["width"]),

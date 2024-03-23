@@ -7,10 +7,8 @@ import json
 LANDSAT_FOLDER = "./landsat_ARD"
 
 
-# Parse folder to create list of tuple filepaths linking TIF to MTL json
-# Should point to folder containing each Landsat 9 scene as separate folders containing TIF and MTL files
+# Parse folder to create list of filepaths
 def parse_landsat_folder(folder):
-    # Create list of tuples linking TIF to MTL json
     landsat_files = []
     for root, dirs, files in os.walk(folder):
         tif_path = None
@@ -30,10 +28,10 @@ def parse_landsat_folder(folder):
 
 
 def process_landsat(tif_path, mtl_path, emis_path):
-    # Open TIF file
+
     with rasterio.open(tif_path) as src:
-        # Read TIF file
-        b10 = src.read()  # Read Band 10
+
+        b10 = src.read()
         meta = src.meta
 
     with rasterio.open(emis_path) as emis_src:
@@ -54,8 +52,6 @@ def process_landsat_folder(landsat_folder):
     # Process each Landsat 9 scene
     for tif_path, mtl_path, emis_path in landsat_files:
         b10, meta, mtl, emissivity = process_landsat(tif_path, mtl_path, emis_path)
-        print(f"Processing {tif_path} with {mtl_path} and {emis_path}...")
-        # Do something with the data
         toa_radiance = convert_toa_radiance(b10, meta, mtl)
         raw_kelvin = convert_to_kelvin(toa_radiance, mtl)
         corrected_kelvin = adjust_for_emissivity(raw_kelvin, emissivity)

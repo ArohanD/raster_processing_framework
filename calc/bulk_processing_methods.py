@@ -1,7 +1,5 @@
 import numpy as np
 from datetime import datetime
-from affine import Affine
-
 
 def average_bands(scene_list):
     band_sum = None
@@ -14,10 +12,8 @@ def average_bands(scene_list):
             band_sum = np.zeros_like(band)
         band_sum += band
 
-    # Calculate the width and height of the output raster
     bands_average = band_sum / len(scene_list)
-    new_meta = meta.copy()
-    return {"band": bands_average, "meta": new_meta}
+    return {"band": bands_average, "meta": meta.copy()}
 
 
 def average_ST_by_year(st_scene_library):

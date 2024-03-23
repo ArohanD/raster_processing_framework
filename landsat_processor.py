@@ -7,16 +7,14 @@ import rasterio
 
 from calc.landsat_processing_methods import calc_surface_temp
 from calc.bulk_processing_methods import average_ST_by_year
-from file_methods.file_methods import peek, get_common_window
+from file_methods.file_methods import peek
 
 process_dict = {
     # Kelvin
     "surface_temp": {"folder_process": calc_surface_temp, "bulk_process": None},
     # Celsius
     "surface_temp_celsius": {
-        "folder_process": lambda scene, celsius=True: calc_surface_temp(
-            scene, celsius
-        ),
+        "folder_process": lambda scene, celsius=True: calc_surface_temp(scene, celsius),
         "bulk_process": None,
     },
     # Celsius with yearly averages
@@ -50,7 +48,11 @@ def write_outputs(output_path, output_suffix, output_library):
     print(f"Output path: {output_path}")
     for scene_key in output_library:
         current_scene = output_library[scene_key]
-        modified_scene_key = scene_key.replace("./landsat", "", 1) if scene_key.startswith("./landsat") else f"/{scene_key}"
+        modified_scene_key = (
+            scene_key.replace("./landsat", "", 1)
+            if scene_key.startswith("./landsat")
+            else f"/{scene_key}"
+        )
         file_path = f"{output_path}{modified_scene_key}_{output_suffix}.tif"
         print(f"Writing {file_path}")
         with rasterio.open(file_path, "w", **current_scene["meta"]) as destination:
@@ -100,12 +102,13 @@ def process_landsat_data(
 
     processed_scene_library = {}
     process_bulk = bool(process_dict[processing_method]["bulk_process"])
+    reprojection_config = peek(scene_library) if process_bulk else None
     for scene in scene_library:
         processed_scene_library[scene] = process_dict[processing_method][
             "folder_process"
         ](
             scene_library[scene],
-            reprojection_config=peek(scene_library) if process_bulk else None,
+            reprojection_config=reprojection_config,
         )
 
     output_library = (
