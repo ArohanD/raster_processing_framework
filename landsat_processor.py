@@ -25,7 +25,9 @@ process_dict = {
             scene, celsius, reprojection_config
         ),
         "bulk_process": None,
-        "stat_calculator": lambda **args: surface_temp_stats(**args, celsius=True),
+        "stat_calculator": lambda band, meta, mtl: surface_temp_stats(
+            band, meta, mtl, celsius=True
+        ),
     },
     # Celsius with yearly averages
     "averaged_yearly_surface_temp_celsius": {
@@ -33,7 +35,9 @@ process_dict = {
             scene, celsius, reprojection_config
         ),
         "bulk_process": average_by_year,
-        "stat_calculator": lambda **args: surface_temp_stats(**args, celsius=True),
+        "stat_calculator": lambda band, meta, mtl: surface_temp_stats(
+            band, meta, mtl, celsius=True
+        ),
     },
     # Celsius with yearly averages
     "averaged_surface_temp_celsius": {
@@ -41,7 +45,9 @@ process_dict = {
             scene, celsius, reprojection_config
         ),
         "bulk_process": average_all_data,
-        "stat_calculator": lambda **args: surface_temp_stats(**args, celsius=True),
+        "stat_calculator": lambda band, meta, mtl: surface_temp_stats(
+            band, meta, mtl, celsius=True
+        ),
     },
     # NDVI
     "ndvi": {
@@ -97,7 +103,7 @@ def write_outputs(output_path, output_suffix, output_library, processing_method)
             band_data = current_scene["band"]
 
             stats = process_dict[processing_method]["stat_calculator"](
-                band_data, current_scene["meta"]
+                band_data, current_scene["meta"], current_scene["mtl"]
             )
 
             # Update metadata with statistics for the band

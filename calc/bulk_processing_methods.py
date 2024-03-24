@@ -1,19 +1,23 @@
 import numpy as np
 from datetime import datetime
 
+
 def average_bands(scene_list):
     band_sum = None
     for scene in scene_list:
-        band, meta = (
+        band, meta, mtl = (
             scene["band"],
             scene["meta"],
+            scene["mtl"],
         )
         if band_sum is None:
             band_sum = np.zeros_like(band)
         band_sum += band
 
     bands_average = band_sum / len(scene_list)
-    return {"band": bands_average, "meta": meta.copy()}
+    # meta will be the same for all scenes due to reprojection, mtl is just for min/max reference
+    return {"band": bands_average, "meta": meta.copy(), "mtl": mtl}
+
 
 def print_num_scenes_by_year(scenes_by_year):
     for year in scenes_by_year:
@@ -42,6 +46,7 @@ def average_by_year(processed_scene_library):
         averages_by_year[f"{year}_average"] = average_bands(scenes_by_year[year])
 
     return averages_by_year
+
 
 def average_all_data(scene_library):
     print("Averaging ALL processed bands into an average...")

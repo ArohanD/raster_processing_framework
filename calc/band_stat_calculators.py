@@ -3,15 +3,16 @@ import numpy as np
 CELSIUS_SCALAR = -272.15
 
 
-def surface_temp_stats(band, meta, celsius=False):
+def surface_temp_stats(band, meta, mtl, celsius=False):
     celsius_scalar = CELSIUS_SCALAR if celsius else 0
+    surface_temp_params = mtl["LANDSAT_METADATA_FILE"][
+        "LEVEL2_SURFACE_TEMPERATURE_PARAMETERS"
+    ]
     temp_min = (
-        meta["LEVEL2_SURFACE_TEMPERATURE_PARAMETERS"]["TEMPERATURE_MINIMUM_BAND_ST_B10"]
-        + celsius_scalar
+        float(surface_temp_params["TEMPERATURE_MINIMUM_BAND_ST_B10"]) + celsius_scalar
     )
     temp_max = (
-        meta["LEVEL2_SURFACE_TEMPERATURE_PARAMETERS"]["TEMPERATURE_MAXIMUM_BAND_ST_B10"]
-        + celsius_scalar
+        float(surface_temp_params["TEMPERATURE_MAXIMUM_BAND_ST_B10"]) + celsius_scalar
     )
     filter_mask = (band != meta["nodata"]) & (band > temp_min) & (band < temp_max)
     filtered_band = band[filter_mask]
@@ -23,7 +24,8 @@ def surface_temp_stats(band, meta, celsius=False):
         "max": np.max(filtered_band),
     }
 
-def ndvi_stats(band, meta):
+
+def ndvi_stats(band, meta, mtl):
     filter_mask = (band != meta["nodata"]) & (band > -1) & (band < 1)
     filtered_band = band[filter_mask]
     return {

@@ -34,7 +34,6 @@ def calc_surface_temp(scene, celsius=False, reprojection_config=False):
             "TEMPERATURE_ADD_BAND_ST_B10"
         ]
     )
-    print(CELSIUS_SCALAR)
     celsius_scalar = CELSIUS_SCALAR if celsius else 0
     converted_b10 = multiplier * b10 + coefficient + celsius_scalar
 
